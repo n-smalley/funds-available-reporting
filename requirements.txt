@@ -1,0 +1,8 @@
+pyautogui
+pypdf
+pywin32
+pandas
+pyscreeze
+opencv-python
+pillow
+openpyxl
