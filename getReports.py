@@ -2,6 +2,7 @@ import os
 import win32com.client
 from datetime import datetime
 import pandas as pd
+import pyperclip
 
 def save_attachments_from_subfolder(save_path: str, subfolder_name: str) -> None:
     # Initialize Outlook application
@@ -29,10 +30,36 @@ def save_attachments_from_subfolder(save_path: str, subfolder_name: str) -> None
             for attachment in item.Attachments:
                 attachment.SaveAsFile(os.path.join(save_path, attachment.FileName))
 
+def account_type(budget: float,account_name: str,expenditure: float,account: str) -> str:
+    if 'budgetentry' in account_name.lower().replace(' ',''):
+        return 'Budget Account'
+    elif (budget != 0.0) and ('budgetentry' not in account_name.lower().replace(' ','')):
+        return 'Parent Account'
+    elif (expenditure != 0.0) and (budget == 0.0):
+        return 'Expense Account'
+    else:
+        if account in ['520049','520389','520485','520609','520825','521200','530005','530170','530600','540129','540165','540345','550005','560220','560226','560240']:
+            return 'Parent Account'
+        else:
+            return 'Expense Account'
+
+def currency_to_float(currency_str: str) -> float:
+    currency_str = currency_str.replace(',','')
+    if currency_str.startswith('(') and currency_str.endswith(')'):
+        return -float(currency_str.replace('(', '').replace(')', '').replace('$', ''))
+    else:
+        return float(currency_str.replace('$', ''))
+
+def clean_account(account_str: str) -> str:
+    return account_str.replace('‬﻿﻿','').replace('﻿‭','').replace(' ','')
+
 def clean_reports(folder: str) -> pd.DataFrame:
     hold = pd.DataFrame()
     for i in os.listdir(folder):
         f = os.path.join(folder,i)
+        if not i.endswith('.xls'):
+            os.remove(f)
+            continue
         df = pd.read_html(f)
         period = df[0][1].at[4]
 
@@ -45,6 +72,13 @@ def clean_reports(folder: str) -> pd.DataFrame:
     df = hold.sort_values('GL Account').reset_index(drop=True)
     df['Period'] = [period for _ in df.index]
 
+    df['Account Tree'] = [clean_account(acct) for acct in df['Account Tree']]
+
+    for col in ['Original Budget','Current Budget','Expenditures','Committments','Obligations','Other Encumbrances','Total Expenditure Encumbrances','Funds Available']:
+        df[col] = [currency_to_float(i) for i in df[col]]
+
+    df['acctType'] = [account_type(bud,name,expend,num) for bud,name,expend,num in zip(df['Original Budget'],df['Account Name'],df['Expenditures'],df['Account Tree'])]
+    
     return df
 
 def export_report(dataframe: pd.DataFrame,export_path: str,hold_path: str) -> None:
@@ -75,4 +109,3 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-
