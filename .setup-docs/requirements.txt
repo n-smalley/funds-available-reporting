@@ -6,3 +6,5 @@ pyscreeze
 opencv-python
 pillow
 openpyxl
+xlrd
+lxml
