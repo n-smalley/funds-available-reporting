@@ -91,7 +91,7 @@ def export_report(dataframe: pd.DataFrame,export_path: str,hold_path: str) -> No
 
 def main() -> None:
     # Define the save path and subfolder name
-    hold_path = r'hold-reports'
+    hold_path = os.path.abspath(r'hold-reports')
     export_path = r'c:\Users\nathansmalley\OneDrive - Cook County Government\1 - Reports\FundsAvailable'
     subfolder_name = 'Funds Available'
 
