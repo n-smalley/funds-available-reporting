@@ -30,7 +30,7 @@ def save_attachments_from_subfolder(save_path: str, subfolder_name: str) -> None
             for attachment in item.Attachments:
                 attachment.SaveAsFile(os.path.join(save_path, attachment.FileName))
 
-def account_type(budget: float,account_name: str,expenditure: float,account: str) -> str:
+def get_account_type(budget: float,account_name: str,expenditure: float,account: str) -> str:
     if 'budgetentry' in account_name.lower().replace(' ',''):
         return 'Budget Account'
     elif (budget != 0.0) and ('budgetentry' not in account_name.lower().replace(' ','')):
@@ -52,6 +52,17 @@ def currency_to_float(currency_str: str) -> float:
 
 def clean_account(account_str: str) -> str:
     return account_str.replace('‬﻿﻿','').replace('﻿‭','').replace(' ','')
+
+def match_accounts(account_types: pd.Series,account_numbers: pd.Series) -> list:
+    matched_accounts = []
+    last_parent = ''
+    for typ,num in zip(account_types,account_numbers):
+        if typ == 'Parent Account':
+            last_parent = num
+        matched_accounts.append(last_parent)
+    
+    return matched_accounts
+
 
 def clean_reports(folder: str) -> pd.DataFrame:
     hold = pd.DataFrame()
@@ -77,7 +88,9 @@ def clean_reports(folder: str) -> pd.DataFrame:
     for col in ['Original Budget','Current Budget','Expenditures','Committments','Obligations','Other Encumbrances','Total Expenditure Encumbrances','Funds Available']:
         df[col] = [currency_to_float(i) for i in df[col]]
 
-    df['acctType'] = [account_type(bud,name,expend,num) for bud,name,expend,num in zip(df['Original Budget'],df['Account Name'],df['Expenditures'],df['Account Tree'])]
+    df['acctType'] = [get_account_type(bud,name,expend,num) for bud,name,expend,num in zip(df['Original Budget'],df['Account Name'],df['Expenditures'],df['Account Tree'])]
+
+    df['parentAcct'] = match_accounts(df['acctType'],df['GL Account'])
     
     return df
 
@@ -108,4 +121,6 @@ def main() -> None:
     export_report(df,export_path,hold_path)
 
 if __name__ == '__main__':
+    print('COMPILING FUNDS AVAILABLE')
     main()
+    print(' Success')
