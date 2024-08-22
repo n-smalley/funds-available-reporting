@@ -1,13 +1,13 @@
 import os
 import win32com.client
-from datetime import datetime
+from datetime import datetime,timedelta
 import pandas as pd
 import pyperclip
 
-def save_attachments_from_subfolder(save_path: str, subfolder_name: str) -> None:
-    # Initialize Outlook application
-    outlook = win32com.client.Dispatch("Outlook.Application")
-    namespace = outlook.GetNamespace("MAPI")
+def initialize_outlook(subfolder_name: str) -> tuple[object | None, object | None]:
+    '''Initialize Outlook and access the specified subfolder and Deleted Items folder.'''
+    outlook = win32com.client.Dispatch('Outlook.Application')
+    namespace = outlook.GetNamespace('MAPI')
 
     # Access the Inbox folder
     inbox = namespace.GetDefaultFolder(6)  # 6 corresponds to the Inbox folder
@@ -16,8 +16,72 @@ def save_attachments_from_subfolder(save_path: str, subfolder_name: str) -> None
     try:
         subfolder = inbox.Folders.Item(subfolder_name)
     except Exception as e:
-        print(f"Error accessing subfolder: {e}")
+        print(f'Error accessing subfolder: {e}')
+        return None, None
+    
+    # Access the Deleted Items folder
+    deleted_items = namespace.GetDefaultFolder(3)  # 3 corresponds to the Deleted Items folder
+
+    return subfolder, deleted_items
+
+def process_emails(subfolder: object, report_one_time: str, report_two_time: str) -> list[object]:
+    '''Process emails and determine which to keep and delete.'''
+    today = datetime.today().date()
+    # Convert report times to offset-naive datetime
+    report_one_time = datetime.combine(today, datetime.strptime(report_one_time, '%H:%M').time())
+    report_two_time = datetime.combine(today, datetime.strptime(report_two_time, '%H:%M').time())
+
+    emails_to_delete = []
+    report_one_email = None
+    report_two_email = None
+
+    for item in subfolder.Items:
+        # Ensure the item is a MailItem
+        if item.Class == 43:  # 43 corresponds to a MailItem
+            item.UnRead = False  # Mark email as read
+            received_time = item.ReceivedTime
+            received_date = received_time.date()
+
+            # Convert received_time to offset-naive datetime if necessary
+            if received_time.tzinfo is not None:
+                received_time = received_time.replace(tzinfo=None)
+
+            if received_date == today:
+                if received_time < report_one_time:
+                    if report_one_email is None or received_time > report_one_email.ReceivedTime.replace(tzinfo=None):
+                        if report_one_email:
+                            emails_to_delete.append(report_one_email)
+                        report_one_email = item
+                    else:
+                        emails_to_delete.append(item)
+                elif report_one_time <= received_time <= report_two_time:
+                    if report_two_email is None or received_time > report_two_email.ReceivedTime.replace(tzinfo=None):
+                        if report_two_email:
+                            emails_to_delete.append(report_two_email)
+                        report_two_email = item
+                    else:
+                        emails_to_delete.append(item)
+                else:
+                    emails_to_delete.append(item)
+
+    return emails_to_delete
+
+def move_emails_to_deleted(emails_to_delete: list[object], deleted_items: object) -> None:
+    '''Move the specified emails to the Deleted Items folder.'''
+    for email in emails_to_delete:
+        email.Move(deleted_items)
+
+def clean_outlook_folder(subfolder_name: str, report_one_time: str, report_two_time: str) -> None:
+    '''Clean the Outlook folder by keeping specific emails and deleting others.'''
+    subfolder, deleted_items = initialize_outlook(subfolder_name)
+    if subfolder is None or deleted_items is None:
         return
+    
+    emails_to_delete = process_emails(subfolder, report_one_time, report_two_time)
+    move_emails_to_deleted(emails_to_delete, deleted_items)
+
+def save_attachments_from_subfolder(save_path: str, subfolder_name: str) -> None:
+    subfolder,_ = initialize_outlook(subfolder_name)
 
     # Get today's date
     today = datetime.today().date()
@@ -110,6 +174,9 @@ def main() -> None:
 
     # Create the save directory if it doesn't exist
     os.makedirs(hold_path, exist_ok=True)
+
+    # clean exra reports from folder
+    clean_outlook_folder(subfolder_name, '04:25', '04:45')
 
     # Call the function to save attachments from the specified subfolder
     save_attachments_from_subfolder(hold_path, subfolder_name)
